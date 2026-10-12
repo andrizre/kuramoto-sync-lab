@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kuramoto Sync Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Kuramoto Sync Lab</h1>
+  <p class="subtitle">Watch hundreds of coupled phase oscillators fall into (or out of) synchrony.</p>
+</header>
+
+<main>
+  <div class="controls">
+    <label>Coupling K <span id="kVal">1.20</span>
+      <input type="range" id="kSlider" min="0" max="4" step="0.01" value="1.2">
+    </label>
+    <label>Noise σ <span id="sigmaVal">0.15</span>
+      <input type="range" id="sigmaSlider" min="0" max="1" step="0.01" value="0.15">
+    </label>
+    <label>Speed <span id="speedVal">1.0×</span>
+      <input type="range" id="speedSlider" min="0.1" max="4" step="0.1" value="1">
+    </label>
+    <label>Count N <span id="nVal">300</span>
+      <input type="range" id="nSlider" min="50" max="1200" step="10" value="300">
+    </label>
+    <label>Spread γ <span id="gammaVal">1.00</span>
+      <input type="range" id="gammaSlider" min="0.1" max="3" step="0.05" value="1">
+    </label>
+    <label>Topology
+      <select id="topoSelect">
+        <option value="global">Global (all-to-all)</option>
+        <option value="ring">Ring (nearest neighbors)</option>
+        <option value="smallworld">Small-world</option>
+        <option value="grid">2D grid</option>
+      </select>
+    </label>
+    <label>Natural freq dist.
+      <select id="distSelect">
+        <option value="gauss">Gaussian</option>
+        <option value="uniform">Uniform</option>
+        <option value="bimodal">Bimodal</option>
+      </select>
+    </label>
+    <div class="buttons">
+      <button id="reshuffleBtn">Reshuffle ω</button>
+      <button id="kickBtn">Desync kick</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="pngBtn">Save PNG</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="sim" width="900" height="620"></canvas>
+  </div>
+
+  <section class="readout">
+    <div class="meter">
+      <span class="metric">Order parameter r = <b id="rVal">–</b></span>
+      <div class="bar"><div id="rBar"></div></div>
+    </div>
+    <canvas id="rChart" width="900" height="120"></canvas>
+    <p class="note">r ≈ 0: incoherent chaos · r ≈ 1: full synchrony. Push <b>Coupling K</b> past the critical point K<sub>c</sub> ≈ 2/(π·g(0)) and watch the phase transition happen in real time.</p>
+  </section>
+</main>
+
+<footer>
+  <p>Kuramoto model: dθᵢ/dt = ωᵢ + (K/zᵢ) Σⱼ Aᵢⱼ sin(θⱼ − θᵢ) + σξᵢ(t) — rendered with plain Canvas 2D. No dependencies.</p>
+</footer>
+
+<script src="sim.js"></script>
+</body>
+</html>
