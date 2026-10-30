@@ -15,6 +15,9 @@ in unison, synchronized cardiac pacemaker cells, and power-grid frequency lockin
 - **3 natural-frequency distributions**: Gaussian, uniform, bimodal.
 - Sliders for coupling K, noise σ, speed, population size N, and frequency spread γ.
 - **Desync kick** button to knock the system out of sync and watch it re-lock.
+- **Sweep K** button: runs an automated scan of steady-state r̄ over K ∈ [0, 4],
+  plots the r̄(K) curve, and marks the empirically measured critical coupling Kc
+  with a dashed line — watch the phase transition emerge from the data.
 - Mean-field arrow, per-oscillator hue mapped to natural frequency, PNG export.
 
 ## How to run

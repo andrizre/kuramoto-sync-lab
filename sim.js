@@ -24,6 +24,9 @@ let zdeg = new Float64Array(N); // degree normalization
 // r history for chart
 const rHistory = new Array(450).fill(0);
 
+// K-sweep state
+let sweep = null; // { i, Ks, rs, running } while active
+
 // ---- RNG helpers ----
 function gauss() {
   let u = 0, v = 0;
@@ -206,6 +209,95 @@ function drawChart() {
   cctx.fillText("r(t) — last ~450 frames", 8, 12);
 }
 
+// ---- K sweep: measure steady-state r(t) at each K to find Kc empirically ----
+// Per sweep point: settle for settleSteps frames at fixed dt, then average r
+// over avgSteps frames. Speed is temporarily frozen so timing is deterministic.
+function sweepStep(dt) {
+  const Ksaved = K;
+  const sw = sweep;
+  K = sw.Ks[sw.i];
+  for (let s = 0; s < sw.settleSteps; s++) step(dt);
+  let acc = 0;
+  for (let s = 0; s < sw.avgSteps; s++) { step(dt); acc += orderParameter(); }
+  K = Ksaved;
+  sw.rs[sw.i] = acc / sw.avgSteps;
+  sw.i++;
+}
+
+function startSweep() {
+  const Ks = [];
+  for (let k = 0; k <= 4.0001; k += 0.1) Ks.push(Math.round(k * 100) / 100);
+  // randomize phases again so every sweep starts from incoherence
+  for (let i = 0; i < N; i++) theta[i] = Math.random() * 2 * Math.PI;
+  rHistory.fill(0);
+  sweep = { Ks, rs: new Array(Ks.length).fill(NaN), i: 0, settleSteps: 60, avgSteps: 60 };
+}
+
+function estimateKc() {
+  const sw = sweep;
+  const n = sw.Ks.length;
+  // Kc = first K where r exceeds 0.35 and stays above for 3 consecutive points
+  for (let i = 1; i < n - 2; i++) {
+    if (sw.rs[i] > 0.35 && sw.rs[i + 1] > 0.35 && sw.rs[i + 2] > 0.35) return sw.Ks[i];
+  }
+  return null;
+}
+
+function drawSweep() {
+  const w = chart.width, h = chart.height;
+  const sw = sweep;
+  // axes
+  cctx.strokeStyle = "rgba(120,140,180,0.35)";
+  cctx.lineWidth = 1;
+  cctx.beginPath();
+  cctx.moveTo(30, h - 20); cctx.lineTo(w - 10, h - 20); // x axis
+  cctx.moveTo(30, 10); cctx.lineTo(30, h - 20);         // y axis
+  cctx.stroke();
+  cctx.fillStyle = "rgba(120,140,180,0.8)";
+  cctx.font = "10px monospace";
+  cctx.textAlign = "left";
+  cctx.fillText("r̄(K) — steady state vs coupling  (sweep running: " + (sw.i) + "/" + sw.Ks.length + ")", 36, 14);
+  cctx.textAlign = "center";
+  for (const k of [0, 1, 2, 3, 4]) {
+    const x = 30 + (k / 4) * (w - 40);
+    cctx.fillText(String(k), x, h - 6);
+  }
+  // curve
+  cctx.strokeStyle = "#ff9f43";
+  cctx.lineWidth = 2;
+  cctx.beginPath();
+  let started = false;
+  for (let i = 0; i < sw.i; i++) {
+    const x = 30 + (sw.Ks[i] / 4) * (w - 40);
+    const y = h - 20 - sw.rs[i] * (h - 40);
+    if (!started) { cctx.moveTo(x, y); started = true; } else cctx.lineTo(x, y);
+  }
+  cctx.stroke();
+  // dots
+  cctx.fillStyle = "#4ecdc4";
+  for (let i = 0; i < sw.i; i++) {
+    const x = 30 + (sw.Ks[i] / 4) * (w - 40);
+    const y = h - 20 - sw.rs[i] * (h - 40);
+    cctx.beginPath();
+    cctx.arc(x, y, 2.5, 0, 2 * Math.PI);
+    cctx.fill();
+  }
+  // Kc marker
+  const kc = estimateKc();
+  if (kc !== null) {
+    const x = 30 + (kc / 4) * (w - 40);
+    cctx.strokeStyle = "rgba(255,80,80,0.9)";
+    cctx.setLineDash([4, 4]);
+    cctx.beginPath();
+    cctx.moveTo(x, 10); cctx.lineTo(x, h - 20);
+    cctx.stroke();
+    cctx.setLineDash([]);
+    cctx.fillStyle = "#ff5050";
+    cctx.textAlign = "left";
+    cctx.fillText("Kc ≈ " + kc.toFixed(1), x + 5, 26);
+  }
+}
+
 // ---- UI wiring ----
 const $ = (id) => document.getElementById(id);
 function bindSlider(id, label, fmt, apply) {
@@ -225,7 +317,11 @@ bindSlider("gammaSlider", "gammaVal", v => v.toFixed(2), v => { gamma = v; sampl
 
 $("topoSelect").addEventListener("change", e => { topology = e.target.value; buildTopology(); });
 $("distSelect").addEventListener("change", e => { dist = e.target.value; sampleOmega(); });
-$("reshuffleBtn").addEventListener("click", () => { sampleOmega(); rHistory.fill(0); });
+$("reshuffleBtn").addEventListener("click", () => { sampleOmega(); rHistory.fill(0); sweep = null; });
+$("sweepBtn").addEventListener("click", () => {
+  startSweep();
+  $("sweepBtn").textContent = "Sweeping…";
+});
 $("kickBtn").addEventListener("click", () => {
   for (let i = 0; i < N; i++) theta[i] += (Math.random() - 0.5) * 3;
 });
@@ -245,7 +341,19 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  if (!paused) {
+  if (sweep) {
+    // fixed dt, no noise-free shortcut — one sweep point per frame
+    sweepStep(0.02);
+    drawSweep();
+    $("rVal").textContent = "sweep";
+    $("rBar").style.width = ((sweep.i / sweep.Ks.length) * 100).toFixed(1) + "%";
+    if (sweep.i >= sweep.Ks.length) {
+      sweep = null;
+      $("sweepBtn").textContent = "Sweep K";
+      const kc2 = estimateKc();
+      $("rVal").textContent = kc2 !== null ? "Kc≈" + kc2.toFixed(1) : "–";
+    }
+  } else if (!paused) {
     step(dt * speed);
     rHistory.push(orderParameter());
     rHistory.shift();
